@@ -28,7 +28,7 @@ export const ControlsPanel: React.FC<ControlsPanelProps> = ({ settings, setSetti
 
   return (
     <>
-      <div className={`absolute top-0 left-0 h-full p-6 bg-black/50 backdrop-blur-md transition-transform duration-300 ease-in-out pointer-events-auto z-10 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`} style={{width: '300px'}}>
+      <div className={`absolute top-0 left-0 h-full p-6 bg-black/50 backdrop-blur-md transition-transform duration-300 ease-in-out pointer-events-auto z-10 ${isOpen ? 'translate-x-0' : '-translate-x-full'} overflow-y-auto`} style={{width: '300px'}}>
         <h2 className="text-xl font-bold mb-6">字宙 Controls</h2>
         
         <SettingRow label={`Speed: ${settings.speed.toFixed(2)}`}>
@@ -87,6 +87,27 @@ export const ControlsPanel: React.FC<ControlsPanelProps> = ({ settings, setSetti
             step="0.05"
             value={settings.trailIntensity}
             onChange={(e) => handleSettingChange('trailIntensity', parseFloat(e.target.value))}
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+          />
+        </SettingRow>
+
+        <SettingRow label="Background Color">
+          <input
+            type="color"
+            value={settings.backgroundColor}
+            onChange={(e) => handleSettingChange('backgroundColor', e.target.value)}
+            className="w-full h-10 p-1 bg-gray-800 border border-gray-600 rounded-md cursor-pointer"
+          />
+        </SettingRow>
+
+        <SettingRow label={`Quote Idle Time: ${settings.quoteIdleTime}s`}>
+          <input
+            type="range"
+            min="3"
+            max="20"
+            step="1"
+            value={settings.quoteIdleTime}
+            onChange={(e) => handleSettingChange('quoteIdleTime', parseInt(e.target.value, 10))}
             className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
           />
         </SettingRow>

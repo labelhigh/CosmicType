@@ -14,14 +14,16 @@ export const CHAR_SETS: Record<Language, string> = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
-  speed: 0.5,
-  rotation: 0.2,
+  speed: 0.1,
+  rotation: 0.1,
   language: Language.Mixed,
   theme: Theme.Default,
-  particleCount: 1500,
-  trailIntensity: 0.5,
+  particleCount: 200,
+  trailIntensity: 0.05,
   shape: Shape.None,
-  particleSize: 1.0,
+  particleSize: 0.55,
+  quoteIdleTime: 7,
+  backgroundColor: '#000000',
 };
 
 export const FONT_SIZE_BASE = 14;

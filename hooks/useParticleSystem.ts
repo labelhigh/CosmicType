@@ -3,6 +3,17 @@ import { Settings, Particle, ParticleState, Theme, Shape } from '../types';
 import { CHAR_SETS, FONT_SIZE_BASE, TEXT_HOLD_DURATION } from '../constants';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
+};
+
 
 export const useParticleSystem = (
   canvasRef: React.RefObject<HTMLCanvasElement>,
@@ -36,16 +47,24 @@ export const useParticleSystem = (
     const needsReInit = !isInitialized.current || 
                         lastSettings.current.language !== settings.language || 
                         lastSettings.current.particleCount !== settings.particleCount;
-    
-    const spread = Math.min(canvas.width, canvas.height) * 0.8;
+
+    const getSpread = () => {
+        if (!canvas) return { spreadX: 500, spreadY: 500, spreadZ: 500 };
+        return {
+            spreadX: canvas.width * 1.5,
+            spreadY: canvas.height * 1.5,
+            spreadZ: Math.max(canvas.width, canvas.height),
+        };
+    };
 
     const initializeParticles = () => {
         const charSet = CHAR_SETS[settings.language];
         particlesRef.current = [];
+        const { spreadX, spreadY, spreadZ } = getSpread();
         for (let i = 0; i < settings.particleCount; i++) {
-            const x = (Math.random() - 0.5) * spread;
-            const y = (Math.random() - 0.5) * spread;
-            const z = (Math.random() - 0.5) * spread;
+            const x = (Math.random() - 0.5) * spreadX;
+            const y = (Math.random() - 0.5) * spreadY;
+            const z = (Math.random() - 0.5) * spreadZ;
             particlesRef.current.push({
                 x, y, z,
                 vx: 0, vy: 0, vz: 0,
@@ -54,7 +73,7 @@ export const useParticleSystem = (
                 char: charSet[Math.floor(Math.random() * charSet.length)],
                 state: ParticleState.Wandering,
                 color: '#fff',
-                size: 1,
+                size: Math.random() * 0.7 + 0.3, // Randomized base size
                 alpha: 1,
                 holdTime: 0,
             });
@@ -68,10 +87,11 @@ export const useParticleSystem = (
         initializeParticles();
         isInitialized.current = true;
       } else {
+        const { spreadX, spreadY, spreadZ } = getSpread();
         particlesRef.current.forEach(p => {
-          p.homeX = (Math.random() - 0.5) * spread;
-          p.homeY = (Math.random() - 0.5) * spread;
-          p.homeZ = (Math.random() - 0.5) * spread;
+          p.homeX = (Math.random() - 0.5) * spreadX;
+          p.homeY = (Math.random() - 0.5) * spreadY;
+          p.homeZ = (Math.random() - 0.5) * spreadZ;
         });
       }
     };
@@ -95,6 +115,20 @@ export const useParticleSystem = (
             targetZ = p.targetZ;
         }
 
+        // When a particle is dissipating, it moves back to its home position.
+        // Once it's close enough, we reset its state to Wandering and give it a new random character.
+        // This ensures the text "dissolves" back into the random cloud.
+        if (p.state === ParticleState.Dissipating) {
+            const dx = p.x - p.homeX;
+            const dy = p.y - p.homeY;
+            const dz = p.z - p.homeZ;
+            if ((dx*dx + dy*dy + dz*dz) < 100) { // If close to home
+                p.state = ParticleState.Wandering;
+                const charSet = CHAR_SETS[settings.language];
+                p.char = charSet[Math.floor(Math.random() * charSet.length)];
+            }
+        }
+
         const ease = p.state === ParticleState.Wandering ? 0.01 : 0.08;
         p.vx = lerp(p.vx, targetX - p.x, ease);
         p.vy = lerp(p.vy, targetY - p.y, ease);
@@ -106,20 +140,21 @@ export const useParticleSystem = (
         
         if (settings.theme === Theme.Matrix && p.state === ParticleState.Wandering) {
             p.y += p.size * 0.5 * settings.speed;
-            if (p.y > spread / 2) {
-                p.y = -spread / 2;
+            if (p.y > getSpread().spreadY / 2) {
+                p.y = -getSpread().spreadY / 2;
             }
         }
     };
     
     const animate = () => {
-      const { theme, trailIntensity } = settings;
+      const { theme, trailIntensity, backgroundColor } = settings;
 
       // Handle fading trail effect
       switch (theme) {
         case Theme.Matrix:
           const matrixClearAlpha = 0.3 - (trailIntensity * 0.28);
-          ctx.fillStyle = `rgba(0, 0, 0, ${matrixClearAlpha})`;
+          const rgbMatrix = hexToRgb(backgroundColor) || { r: 0, g: 0, b: 0 };
+          ctx.fillStyle = `rgba(${rgbMatrix.r}, ${rgbMatrix.g}, ${rgbMatrix.b}, ${matrixClearAlpha})`;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           break;
         case Theme.Ink:
@@ -129,7 +164,8 @@ export const useParticleSystem = (
           break;
         default: // Default and Fire themes
           const defaultClearAlpha = 1 - trailIntensity;
-          ctx.fillStyle = `rgba(0, 0, 0, ${defaultClearAlpha})`;
+          const rgbDefault = hexToRgb(backgroundColor) || { r: 0, g: 0, b: 0 };
+          ctx.fillStyle = `rgba(${rgbDefault.r}, ${rgbDefault.g}, ${rgbDefault.b}, ${defaultClearAlpha})`;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           break;
       }
@@ -170,7 +206,7 @@ export const useParticleSystem = (
             if (projX < 0 || projX > canvas.width || projY < 0 || projY > canvas.height) return;
 
             const isAssembledParticle = p.state !== ParticleState.Wandering;
-            const size = (isAssembledParticle ? FONT_SIZE_BASE * 4.0 : FONT_SIZE_BASE) * scale * settings.particleSize;
+            const size = (isAssembledParticle ? FONT_SIZE_BASE * 4.0 : FONT_SIZE_BASE * p.size) * scale * settings.particleSize;
             const alpha = scale;
             
             let color;
@@ -199,8 +235,8 @@ export const useParticleSystem = (
                   ctx.shadowBlur = 20;
                   ctx.shadowColor = 'rgba(200, 225, 255, 1)';
                 } else {
-                  color = `rgba(200, 225, 255, ${alpha})`;
-                  ctx.shadowBlur = 5;
+                  color = `rgba(200, 225, 255, ${alpha * (p.size * 0.5 + 0.5)})`;
+                  ctx.shadowBlur = p.size > 0.8 ? 3 : 0;
                   ctx.shadowColor = 'rgba(150, 200, 255, 0.5)';
                 }
                 break;
@@ -344,56 +380,62 @@ export const useParticleSystem = (
   useEffect(() => {
     if (targetText && lastTargetText.current !== targetText) {
       lastTargetText.current = targetText;
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext('2d');
-      if (!canvas || !ctx) return;
 
-      particlesRef.current.forEach(p => {
-          if (p.state !== ParticleState.Wandering) {
-              p.state = ParticleState.Dissipating;
-          }
-      });
-
-      const fontSize = Math.min(canvas.width / (targetText.length + 2), 100);
-      ctx.font = `bold ${fontSize}px "Noto Sans SC", sans-serif`;
-      const textMetrics = ctx.measureText(targetText);
-      const textWidth = textMetrics.width;
-
-      const startX = -textWidth / 2;
-
-      let currentX = startX;
-      
-      const availableParticles = [...particlesRef.current].sort(() => 0.5 - Math.random());
-      let particleIndex = 0;
-
-      for (let i = 0; i < targetText.length; i++) {
-        const char = targetText[i];
-        if (char === ' ') {
-            currentX += fontSize * 0.5;
-            continue;
-        };
-
-        const charMetrics = ctx.measureText(char);
-        const charWidth = charMetrics.width;
-
-        if(particleIndex >= availableParticles.length) break;
-        const p = availableParticles[particleIndex++];
-
-        p.char = char;
-        p.state = ParticleState.Assembling;
-        p.targetX = currentX + charWidth / 2;
-        p.targetY = 0;
-        p.targetZ = 200; // Bring text to the front
-        p.holdTime = TEXT_HOLD_DURATION;
-        
-        setTimeout(() => {
-            if(p.state === ParticleState.Assembling) {
-                p.state = ParticleState.Holding;
+      const timerId = setTimeout(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+  
+        particlesRef.current.forEach(p => {
+            if (p.state !== ParticleState.Wandering) {
+                p.state = ParticleState.Dissipating;
             }
-        }, 1500);
+        });
+  
+        const fontSize = Math.min(canvas.width / (targetText.length + 2), 100);
+        ctx.font = `bold ${fontSize}px "Noto Sans SC", sans-serif`;
+        const textMetrics = ctx.measureText(targetText);
+        const textWidth = textMetrics.width;
+  
+        const startX = -textWidth / 2;
+  
+        let currentX = startX;
+        
+        const availableParticles = [...particlesRef.current].sort(() => 0.5 - Math.random());
+        let particleIndex = 0;
+  
+        for (let i = 0; i < targetText.length; i++) {
+          const char = targetText[i];
+          if (char === ' ') {
+              currentX += fontSize * 0.5;
+              continue;
+          };
+  
+          const charMetrics = ctx.measureText(char);
+          const charWidth = charMetrics.width;
+  
+          if(particleIndex >= availableParticles.length) break;
+          const p = availableParticles[particleIndex++];
+  
+          p.char = char;
+          p.state = ParticleState.Assembling;
+          p.targetX = currentX + charWidth / 2;
+          p.targetY = 0;
+          p.targetZ = 200; // Bring text to the front
+          p.holdTime = TEXT_HOLD_DURATION;
+          
+          setTimeout(() => {
+              if(p.state === ParticleState.Assembling) {
+                  p.state = ParticleState.Holding;
+              }
+          }, 1500);
+  
+          currentX += charWidth;
+        }
+      }, 50); // A small delay to ensure canvas is ready for measurement
 
-        currentX += charWidth;
-      }
+      return () => clearTimeout(timerId);
+
     } else if (!targetText && lastTargetText.current) {
         lastTargetText.current = '';
         if (settings.shape === Shape.None) {

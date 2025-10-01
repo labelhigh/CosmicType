@@ -29,6 +29,8 @@ export interface Settings {
   trailIntensity: number;
   shape: Shape;
   particleSize: number;
+  quoteIdleTime: number;
+  backgroundColor: string;
 }
 
 export enum ParticleState {

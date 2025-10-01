@@ -1,18 +1,16 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+
+import React, { useState, useCallback, useEffect } from 'react';
 import { ControlsPanel } from './components/ControlsPanel';
 import { InputBar } from './components/InputBar';
 import { ParticleCanvas } from './components/ParticleCanvas';
 import { Settings, Shape } from './types';
-import { DEFAULT_SETTINGS, RANDOM_QUOTES } from './constants';
+import { DEFAULT_SETTINGS, RANDOM_QUOTES, TEXT_HOLD_DURATION } from './constants';
 
 function App() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [inputText, setInputText] = useState<string>('你好世界');
-  const [targetText, setTargetText] = useState<string>('');
+  const [targetText, setTargetText] = useState<string>('你好世界');
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(true);
-  
-  const idleTimerRef = useRef<number | null>(null);
-  const quoteClearTimerRef = useRef<number | null>(null);
 
   const handleGenerate = useCallback(() => {
     setTargetText(inputText);
@@ -32,35 +30,41 @@ function App() {
     });
   }, []);
 
-  // Effect to display random quotes when idle
+  // This useEffect hook manages the lifecycle of the text displayed on screen.
+  // It handles two main scenarios:
+  // 1. When text is displayed (targetText is not empty), it sets a timer to clear the text after a duration.
+  // 2. When the screen is idle (targetText is empty), it sets a timer to show a random quote.
+  // The hook cleans up after itself by clearing any pending timer whenever its dependencies change,
+  // preventing memory leaks and incorrect behavior.
   useEffect(() => {
-    // Always clear existing timers when dependencies change to avoid stale timers
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    if (quoteClearTimerRef.current) clearTimeout(quoteClearTimerRef.current);
-
-    const isIdle = !targetText && settings.shape === Shape.None;
-
-    if (isIdle) {
-      // Set a timer to show a new quote after a delay
-      idleTimerRef.current = window.setTimeout(() => {
-        const randomQuote = RANDOM_QUOTES[Math.floor(Math.random() * RANDOM_QUOTES.length)];
-        
-        setTargetText(randomQuote);
-
-        // Set a timer to clear the quote after it has been displayed
-        quoteClearTimerRef.current = window.setTimeout(() => {
-          setTargetText('');
-        }, 3000); // Quote visible for 3 seconds before dissipating
-
-      }, 7000); // 7 seconds of idle time before showing a quote
+    // If a shape is being displayed, we don't want any text timers.
+    if (settings.shape !== Shape.None) {
+      return;
     }
 
-    // Cleanup function to clear timers when the component unmounts or dependencies change
+    let timerId: number;
+
+    if (targetText) {
+      // Scenario 1: Text is being shown. Set a timer to clear it.
+      timerId = window.setTimeout(() => {
+        setTargetText('');
+      }, TEXT_HOLD_DURATION);
+    } else {
+      // Scenario 2: Screen is idle. Set a timer to show a random quote.
+      timerId = window.setTimeout(() => {
+        const randomQuote = RANDOM_QUOTES[Math.floor(Math.random() * RANDOM_QUOTES.length)];
+        setTargetText(randomQuote);
+      }, settings.quoteIdleTime * 1000);
+    }
+
+    // This is the cleanup function. React runs this function when the component
+    // unmounts, or before it runs the effect again due to a dependency change.
+    // This is crucial for clearing the timeout and preventing multiple timers
+    // from running simultaneously.
     return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      if (quoteClearTimerRef.current) clearTimeout(quoteClearTimerRef.current);
+      clearTimeout(timerId);
     };
-  }, [targetText, settings.shape]);
+  }, [targetText, settings.shape, settings.quoteIdleTime]);
 
 
   return (
